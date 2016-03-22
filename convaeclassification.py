@@ -69,7 +69,6 @@ if __name__ == "__main__":
     counter = 0
     best_valid_err = 100
     early_stop = 50
-
     epoch_i = 0
 
     while counter < early_stop:

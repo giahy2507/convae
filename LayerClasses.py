@@ -6,13 +6,12 @@ from theano.tensor.signal import downsample
 from tensorflow.examples.tutorials.mnist import input_data
 
 class MyConvLayer(object):
-
-    def __init__(self, rng, input, image_shape, filter_shape, border_mode = "valid", activation = T.tanh, params = [None, None]):
-
-        self.input = input
+    def __init__(self, rng, image_shape, filter_shape, border_mode = "valid", activation = T.tanh, params = [None, None]):
         self.image_shape = image_shape
         self.filter_shape = filter_shape
         self.output_shape = (image_shape[0],filter_shape[0],image_shape[2]-filter_shape[2]+1,image_shape[3]-filter_shape[3]+1)
+        self.activation = activation
+        self.border_mode = border_mode
         assert image_shape[1] == filter_shape[1]
         fan_in = np.prod(filter_shape[1:])
         fan_out = filter_shape[0] * np.prod(filter_shape[2:])
@@ -27,15 +26,85 @@ class MyConvLayer(object):
             self.b = theano.shared(value=b_values, borrow=True)
         else:
             self.W, self.b = params[0], params[1]
-        self.conv_out = conv.conv2d(input=input, filters=self.W, filter_shape=filter_shape, image_shape=image_shape, border_mode=border_mode)
-        self.output = activation(self.conv_out * self.conv_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+
         self.params = [self.W, self.b]
         self.L1 = abs(self.W).sum()
         self.L2 = (self.W**2).sum()
 
     def set_input(self, input, mini_batch_size):
-        print "st"
+        self.input = input
+        self.conv_out = conv.conv2d(input=input, filters=self.W, filter_shape=self.filter_shape, image_shape=self.image_shape, border_mode=self.border_mode)
+        self.output = self.activation(self.conv_out * self.conv_out + self.b.dimshuffle('x', 0, 'x', 'x'))
 
+class FullConectedLayer(object):
+    def __init__(self, input, n_in, n_out, activation = T.tanh, params = [None,None]):
+        self.n_in = n_in
+        self.n_out = n_out
+        self.activation = activation
+        if params[0] == None:
+            self.W = theano.shared(value= np.asarray(np.random.rand(n_in,n_out)/np.sqrt(n_in+1),dtype=theano.config.floatX),
+                                   name = "W",
+                                   borrow=True)
+            self.b = theano.shared(value= np.asarray(np.random.rand(n_out,) ,dtype=theano.config.floatX),
+                                   name ="b",
+                                   borrow=True
+            )
+        else:
+            self.W, self.b = params[0], params[1]
+        self.params = [self.W, self.b]
+        self.L1 = abs(self.W).sum()
+        self.L2 = (self.W**2).sum()
+
+    def set_input(self, input):
+        self.input = input
+        self.output = self.activation(T.dot(input,self.W) + self.b)
+
+class SoftmaxLayer(object):
+    def __init__(self , n_in, n_out, params=[None, None]):
+        if params[0] == None:
+            self.W = theano.shared(value= np.asarray(np.random.rand(n_in,n_out)/np.sqrt(n_in+1),dtype=theano.config.floatX),
+                                   name = "W",
+                                   borrow=True)
+            self.b = theano.shared(value= np.asarray(np.random.rand(n_out,) ,dtype=theano.config.floatX),
+                                   name ="b",
+                                   borrow=True
+            )
+        else:
+            self.W, self.b = params[0], params[1]
+        self.n_in = n_in
+        self.n_out = n_out
+        # parameters of the model
+        self.params = [self.W, self.b]
+        self.L1 = abs(self.W).sum()
+        self.L2 = (self.W**2).sum()
+
+    def set_input(self, input):
+        self.input = input
+        self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
+        self.y_pred = T.argmax(self.p_y_given_x, axis=1)
+        self.output = self.y_pred
+
+    def negative_log_likelihood(self,y):
+        return -T.mean(T.log(self.p_y_given_x)*y)
+
+    def predict(self):
+        return self.y_pred
+
+    def error(self,y):
+        y = T.argmax(y,1)
+         # check if y has same dimension of y_pred
+        if y.ndim != self.y_pred.ndim:
+            raise TypeError(
+                'y should have the same shape as self.y_pred',
+                ('y', y.type, 'y_pred', self.y_pred.type)
+            )
+        # check if y is of the correct datatype
+        if y.dtype.startswith('int'):
+            # the T.neq operator returns a vector of 0s and 1s, where 1
+            # represents a mistake in prediction
+            return T.mean(T.neq(self.y_pred, y))
+        else:
+            raise NotImplementedError()
 
 
 def mask_k_maxpooling(variable, variable_shape ,axis, k):
@@ -179,72 +248,6 @@ class LenetConvPoolLayer(object):
         self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
 
         self.params = [self.W, self.b]
-
-class FullConectedLayer(object):
-    def __init__(self, input, n_in, n_out, activation = T.tanh, params = [None,None]):
-        if params[0] == None:
-            self.W = theano.shared(value= np.asarray(np.random.rand(n_in,n_out)/np.sqrt(n_in+1),dtype=theano.config.floatX),
-                                   name = "W",
-                                   borrow=True)
-            self.b = theano.shared(value= np.asarray(np.random.rand(n_out,) ,dtype=theano.config.floatX),
-                                   name ="b",
-                                   borrow=True
-            )
-        else:
-            self.W, self.b = params[0], params[1]
-        self.input = input
-        self.output = activation(T.dot(input,self.W) + self.b)
-        self.params = [self.W, self.b]
-        self.L1 = abs(self.W).sum()
-        self.L2 = (self.W**2).sum()
-
-class SoftmaxLayer(object):
-
-    def __init__(self, input , n_in, n_out, params=[None, None]):
-        if params[0] == None:
-            self.W = theano.shared(value= np.asarray(np.random.rand(n_in,n_out)/np.sqrt(n_in+1),dtype=theano.config.floatX),
-                                   name = "W",
-                                   borrow=True)
-            self.b = theano.shared(value= np.asarray(np.random.rand(n_out,) ,dtype=theano.config.floatX),
-                                   name ="b",
-                                   borrow=True
-            )
-        else:
-            self.W, self.b = params[0], params[1]
-
-        self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
-
-        self.y_pred = T.argmax(self.p_y_given_x, axis=1)
-
-        self.input = input
-        # parameters of the model
-        self.params = [self.W, self.b]
-
-
-        self.L1 = abs(self.W).sum()
-        self.L2 = (self.W**2).sum()
-
-    def negative_log_likelihood(self,y):
-        return -T.mean(T.log(self.p_y_given_x)*y)
-
-    def predict(self):
-        return self.y_pred
-
-    def error(self,y):
-        y = T.argmax(y,1)
-         # check if y has same dimension of y_pred
-        if y.ndim != self.y_pred.ndim:
-            raise TypeError(
-                'y should have the same shape as self.y_pred',
-                ('y', y.type, 'y_pred', self.y_pred.type)
-            )
-        # check if y is of the correct datatype
-        if y.dtype.startswith('int'):
-            # the T.neq operator returns a vector of 0s and 1s, where 1
-            # represents a mistake in prediction
-            return T.mean(T.neq(self.y_pred, y))
-        else:
-            raise NotImplementedError()
 
 if __name__ == "__main__":
 
