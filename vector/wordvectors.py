@@ -44,22 +44,21 @@ class WordVectors(object):
     def cae_prepare_data(self, sentence, min_length,  max_length):
         sentence = sentence.replace("\n","")
         elements = sentence.split()
-        if len(elements) > max_length or len(elements) < min_length:
-            print sentence, " " ,len(elements)
-            return None
         sentence_matrix = np.array([self.wordvector(word) for word in elements])
-        if sentence_matrix.shape[0] < max_length:
+        padding = np.zeros((5,self.embsize),dtype=float)
+        if sentence_matrix.shape[0] < max_length and sentence_matrix.shape[0] > min_length:
             sentence_matrix = np.concatenate((sentence_matrix,np.zeros((max_length-sentence_matrix.shape[0],self.embsize))))
         else:
             print(sentence)
             return None
-        return sentence_matrix
+        sentence_matrix_final = np.concatenate((padding,sentence_matrix,padding))
+        return sentence_matrix_final
 
 if __name__ == "__main__":
 
     w2v = WordVectors.load("100")
     print len(w2v.word_index.keys())
-    fi = open("../datatrain.txt", mode="r")
+    fi = open("../data/mini_corpus.txt", mode="r")
     data_matrix = []
     start = time.clock()
     lines = fi.readlines()
@@ -70,7 +69,7 @@ if __name__ == "__main__":
         counter +=1
         if counter % 100 == 0:
             print("Process sentence line: ", counter)
-        sentence_matrix = w2v.cae_prepare_data(line,min_length=10,max_length=100)
+        sentence_matrix = w2v.cae_prepare_data(line, min_length=10, max_length=100)
         if sentence_matrix != None:
             data_matrix.append(sentence_matrix)
     data_matrix = np.array(data_matrix)
