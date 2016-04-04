@@ -1,7 +1,9 @@
 __author__ = 'HyNguyen'
-
 import numpy as np
 import time
+from gensim.models import word2vec
+import pickle
+
 class WordVectors(object):
     def __init__(self, embsize, embed_matrix, word_index):
         self.embsize = embsize
@@ -10,6 +12,20 @@ class WordVectors(object):
         self.word_list = word_index.keys()
         self.count_null_word = 0
         self.count_exist_word = 0
+
+    def add_wordvector_from_w2vmodel(self, word2vec, words):
+        for word in words:
+            try:
+                vector = word2vec[word]
+                self.embed_matrix[word] = vector
+                self.count_exist_word +=1
+            except:
+                self.count_null_word +=1
+                continue
+
+    def save(self, filename):
+        with open(filename, mode="wb") as f:
+            pickle.dump(self,f)
 
     @classmethod
     def load(cls, filename):

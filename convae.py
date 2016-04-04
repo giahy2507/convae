@@ -7,7 +7,7 @@ from LayerClasses import MyConvLayer,FullConectedLayer
 import cPickle
 import os
 import sys
-# from lasagne.updates import adam,rmsprop,adadelta
+from lasagne.updates import adam,rmsprop,adadelta
 
 def load_np_data(path, onehost = False):
     data = np.load(path)
