@@ -5,6 +5,9 @@ import numpy as np
 import codecs
 from vector.wordvectors import WordVectors
 from convae import ConvolutionAutoEncoder
+import xml.etree.ElementTree as ET
+import nltk
+
 
 class Cluster(object):
     def __init__(self, cluster_id ,list_documents, list_references):
@@ -16,7 +19,7 @@ class Cluster(object):
         self.my_summarys = []
 
     @classmethod
-    def load_from_folder(cls, cluster_id , cluster_path):
+    def load_from_folder_vietnamese_mds(cls, cluster_id , cluster_path):
         if os.path.exists(cluster_path):
             files_name = os.listdir(cluster_path)
             list_documents = []
@@ -44,6 +47,52 @@ class Cluster(object):
                     list_references.append(Document(sentences,document_id))
             return Cluster(cluster_id,list_documents, list_references)
         else:
+            return None
+
+    @classmethod
+    def load_from_folder_duc(cls, cluster_id, cluster_path, wordvectors):
+        if os.path.exists(cluster_path):
+            file_names = os.listdir(cluster_path)
+            list_documents = []
+            list_references = []
+            for file_name in file_names:
+                if file_name[0] == ".":
+                    continue
+                sentences_object = []
+                file_path = cluster_path + "/" + file_name
+                tree = ET.parse(file_path)
+                root = tree.getroot()
+                text_tag = root._children[3]
+                if text_tag.tag == "TEXT":
+                    text = text_tag.text.replace("\n", "")
+                sentences = nltk.tokenize.sent_tokenize(text)
+                for sentence in sentences:
+                    words = nltk.word_tokenize(sentence)
+                    sent_vec = wordvectors.get_vector_addtion(words)
+                    sentences_object.append(Sentence(sentence,sent_vec))
+                document_id = file_name
+                list_documents.append(Document(sentences_object,document_id))
+            return Cluster(cluster_id, list_documents,list_references)
+        else:
+            print("Not a path")
+            return None
+
+    @classmethod
+    def load_from_opinosis(cls, cluster_id, cluster_path, wordvectors):
+        if os.path.exists(cluster_path):
+            list_documents = []
+            list_references = []
+            sentences_object = []
+            with open(cluster_path, mode="r") as f:
+                sentences = f.readlines()
+                for sentence in sentences:
+                    words = nltk.word_tokenize(sentence)
+                    sent_vec = wordvectors.get_vector_addtion(words)
+                    sentences_object.append(Sentence(sentence,sent_vec))
+                list_documents.append(Document(sentences_object,cluster_id))
+            return Cluster(cluster_id, list_documents,list_references)
+        else:
+            print("Not a path")
             return None
 
 class Document(object):

@@ -9,7 +9,8 @@ from summaryobject import *
 from summary import summary as smr
 from vector.wordvectors import WordVectors
 from convae import ConvolutionAutoEncoder
-
+import cPickle
+import os
 
 class CAESummarizer(object):
     def __init__(self, cae_model, word_vector_model, mode = 0):
@@ -24,7 +25,7 @@ class CAESummarizer(object):
         return CAESummarizer(convae, word_vectors, mode)
 
     @classmethod
-    def summary(self, cluster, max_word, mode):
+    def summary(self, cluster, max_word, mode="sub_cosine"):
         """
         ----------
         Params
@@ -41,7 +42,7 @@ class CAESummarizer(object):
             for document in cluster.list_documents:
                 p = []
                 for sentence in document.list_sentences:
-                    if sentence.vector == None:
+                    if sentence.vector is None:
                         continue
                     p.append(k)
                     sentence.sentece_id = k
@@ -52,28 +53,20 @@ class CAESummarizer(object):
             alpha = 0.7
             galma = 0.3
             n = len(V)
-            lamda = 0.3
             numberofWord = max_word
             mode = mode
-            ##########
-            # mode = 0: submodular + cosine
-            # mode = 1: submodular + euclid
-            # mode = 2: mmr + cosine
-            # mode = 3: mmr + euclid
-            # ***** note: galma is the lamda in mmr
-            ##########
             summarize = smr.do_summarize(V, n, P, L, alpha, galma, numberofWord, mode)
             print (summarize)
+            word_count = 0
             for document in cluster.list_documents:
                 for sentence in document.list_sentences:
                     if sentence.sentece_id in summarize:
+                        word_count += sentence.length
+                        if word_count > max_word:
+                            word_count -= sentence.length
+                            continue
                         cluster.my_summarys.append(sentence.content)
-
         return cluster.my_summarys
-
-
-
-import os
 
 
 def generate_system(clusters , path_to_model , path_to_system, mode="sub_cosine"):
@@ -100,14 +93,8 @@ def generate_system(clusters , path_to_model , path_to_system, mode="sub_cosine"
             fo.close()
         print "finished group ", group
 
-
-import cPickle
-
-# modeList = {"sub_cosine":0, "sub_euclid":1,"mmr_cosine":2,"mmr_euclid":3,"kmean_simple":4,
-#                 "mmr_kmean_cosine":5,"mmr_kmean_euclid":6,"mmr_pagerank_cosine":7,
-#                 "mmr_pagerank_euclid":8}
-
-if __name__ == "__main__":
+def create_summary_format_vn():
+    print("create summary format")
     # vietnamesemds_path = "data/vietnamesemds/"
     # caesummarizer = CAESummarizer.create_my_summarizer("model/CAE.model","vector/100")
     #
@@ -130,8 +117,68 @@ if __name__ == "__main__":
     #
     # with open("data/vietnamesemds.pikcle", mode="wb") as f:
     #     cPickle.dump(clusters, f)
-
     with open("data/vietnamesemds.pickle", mode="rb") as f:
         clusters = cPickle.load(f)
 
     generate_system(clusters, "data/VietnameseMDS-grouped/model", "data/VietnameseMDS-grouped/system", mode="sub_euclid")
+
+# modeList = {"sub_cosine":0, "sub_euclid":1,"mmr_cosine":2,"mmr_euclid":3,"kmean_simple":4,
+#                 "mmr_kmean_cosine":5,"mmr_kmean_euclid":6,"mmr_pagerank_cosine":7,
+#                 "mmr_pagerank_euclid":8}
+
+
+def create_summary_format_duc2004(ducpath, wordvectors_path, summary_path):
+    wordvectors = WordVectors.load(wordvectors_path)
+    clusters = []
+    for cluster_id in os.listdir(ducpath):
+        if cluster_id[0] == ".":
+            continue
+        cluster = Cluster.load_from_folder_duc(cluster_id,ducpath+ "/"+cluster_id,wordvectors)
+        summary = CAESummarizer.summary(cluster,100)
+        file_summary = summary_path + "/" + cluster_id[:-1].upper()+".M.100.T.1"
+        with open(file_summary, mode="w") as f:
+            for line in summary:
+                f.write(line + "\n")
+        clusters.append(cluster)
+        print("Finish loading cluster_id: ", cluster_id)
+    return clusters
+
+def create_summary_format_opinosis(opinosis_path, wordvectors_path, summary_path):
+    wordvectors = WordVectors.load(wordvectors_path)
+    clusters = []
+    for cluster_id in os.listdir(opinosis_path):
+        if cluster_id[0] == ".":
+            continue
+        cluster = Cluster.load_from_opinosis(cluster_id,opinosis_path+"/"+cluster_id, wordvectors)
+        summary = CAESummarizer.summary(cluster,25,"kmean_simple")
+        if len(summary) == 0:
+            print("ttdt")
+        cluster_id,_,_ = cluster_id.split(".")
+        folder_summary = summary_path+"/"+cluster_id
+        if not os.path.isdir(folder_summary):
+            os.makedirs(folder_summary)
+        file_summary = folder_summary+"/"+cluster_id+".1.txt"
+        with open(file_summary, mode="w") as f:
+            for line in summary:
+                f.write(line + "\n")
+        clusters.append(cluster)
+        print("Finish loading cluster_id: ", folder_summary)
+    return clusters
+
+
+if __name__ == "__main__":
+
+    # ducpath = "/Users/HyNguyen/Documents/Research/Data/duc2004/DUC2004_Summarization_Documents/duc2004_testdata/tasks1and2/duc2004_tasks1and2_docs/docs"
+    # wordvectors_path = "model/wordvector.txt"
+    # summary_path = "data/peer"
+    # clusters = create_summary_format_duc2004(ducpath, wordvectors_path, summary_path)
+    # with open("data/duc.sumobj.pickle", mode="wb") as f:
+    #     cPickle.dump(clusters,f)
+
+    opinosis_path = "/Users/HyNguyen/Documents/Research/Data/OpinosisDataset1.0_0/topics"
+    wordvectors_path = "model/wordvector.txt"
+    summary_path = "data/peer"
+    clusters = create_summary_format_opinosis(opinosis_path,wordvectors_path,summary_path)
+
+
+
